@@ -50,11 +50,9 @@ def obtenir_headers_aleatoires():
 
 def faire_requete_cloudscraper():
     """Utilise cloudscraper pour passer les protections anti-bot"""
+    # Correction: utiliser le paramètre browser='chrome' (sans dictionnaire), ou sans rien
     scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'mobile': False
-        },
+        browser='chrome',
         delay=random.uniform(0.6, 1.8)
     )
     headers = obtenir_headers_aleatoires()
