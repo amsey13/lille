@@ -16,7 +16,7 @@ INTERVALLE = 45  # en secondes
 
 # Configuration email
 EXPEDITEUR_EMAIL = "mamady22mansare@gmail.com"
-MOT_DE_PASSE_APP = "vuhqliwmnwjyarlh"
+MOT_DE_PASSE_APP = "vuhqliwmnwjyarlh"  # mot de passe d’application Gmail
 DESTINATAIRE_EMAIL = "mamadymansare43@gmail.com"
 
 def obtenir_headers_aleatoires():
@@ -58,6 +58,7 @@ def faire_requete_cloudscraper():
             'maxPrice': '',
             '_': str(int(time.time() * 1000)),
             'rnd': random.randint(1000, 9999)
+        }
         url = BASE_URL + '?' + urlencode(params)
         scraper.get(BASE_URL, headers=headers, timeout=15)
         time.sleep(random.uniform(1, 2.5))
@@ -119,7 +120,7 @@ def extraire_annonces(html):
     return annonces
 
 def envoyer_notification(annonce, verification=False):
-    print("Début envoi email")
+    print("📨 Début envoi email...")
     if verification:
         sujet = "🟢 Vérification - Script logement Lille lancé"
         message = (
@@ -147,9 +148,10 @@ def envoyer_notification(annonce, verification=False):
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(EXPEDITEUR_EMAIL, MOT_DE_PASSE_APP)
-        server.send_message(msg)
+        print(f"Tentative d'envoi à {DESTINATAIRE_EMAIL} depuis {EXPEDITEUR_EMAIL}...")
+        server.sendmail(EXPEDITEUR_EMAIL, DESTINATAIRE_EMAIL, msg.as_string())
         server.quit()
-        print("📧 Notification envoyée")
+        print("📧 Notification envoyée avec succès")
     except Exception as e:
         print(f"❌ Erreur email: {e}")
 
@@ -196,6 +198,3 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"💥 Erreur: {e} - Pause de 2 minutes")
             time.sleep(120)
-
-
-
