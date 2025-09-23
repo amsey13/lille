@@ -59,6 +59,39 @@ def faire_requete_cloudscraper():
             '_': str(int(time.time() * 1000)),
             'rnd': random.randint(1000, 9999)
         }
+            print("Début envoi email")
+            if verification:
+                sujet = "🟢 Vérification - Script logement Lille lancé"
+                message = (
+                    "Le script de surveillance logement Lille est bien lancé !\n\n"
+                    "Ce mail confirme que la partie email fonctionne.\n"
+                    "Vous recevrez une alerte en cas de nouvelle annonce détectée."
+                )
+            else:
+                sujet = f"🚨 ALERTE LOGEMENT LILLE - {time.strftime('%H:%M')}"
+                message = f"""
+                NOUVEAU LOGEMENT DÉTECTÉ !
+        
+                📍 Lieu: {annonce['lieu']}
+                🏠 Titre: {annonce['titre']}
+                💰 Prix: {annonce['prix']}
+                🔗 Lien: {annonce['lien']}
+        
+                ⏰ Détecté à: {time.strftime('%H:%M:%S')}
+                """
+            msg = MIMEText(message, 'plain', 'utf-8')
+            msg['Subject'] = sujet
+            msg['From'] = EXPEDITEUR_EMAIL
+            msg['To'] = DESTINATAIRE_EMAIL
+            try:
+                server = smtplib.SMTP('smtp.gmail.com', 587)
+                server.starttls()
+                server.login(EXPEDITEUR_EMAIL, MOT_DE_PASSE_APP)
+                server.send_message(msg)
+                server.quit()
+                print("📧 Notification envoyée")
+            except Exception as e:
+                print(f"❌ Erreur email: {e}")
         url = BASE_URL + '?' + urlencode(params)
         scraper.get(BASE_URL, headers=headers, timeout=15)
         time.sleep(random.uniform(1, 2.5))
@@ -197,3 +230,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"💥 Erreur: {e} - Pause de 2 minutes")
             time.sleep(120)
+
