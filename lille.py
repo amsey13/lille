@@ -16,7 +16,7 @@ INTERVALLE = 45  # en secondes
 
 # Configuration email
 EXPEDITEUR_EMAIL = "mamady22mansare@gmail.com"
-MOT_DE_PASSE_APP = "vuhqliwmnwjyarlh"
+MOT_DE_PASSE_APP = "vvue zbzu echd rvgk"
 DESTINATAIRE_EMAIL = "mamadymansare43@gmail.com"
 
 def obtenir_headers_aleatoires():
@@ -201,3 +201,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"💥 Erreur: {e} - Pause de 2 minutes")
             time.sleep(120)
+
