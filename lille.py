@@ -16,7 +16,7 @@ INTERVALLE = 45  # en secondes
 
 # Configuration email
 EXPEDITEUR_EMAIL = "mamady22mansare@gmail.com"
-MOT_DE_PASSE_APP = "vvue zbzu echd rvgk"
+MOT_DE_PASSE_APP = "vuhqliwmnwjyarlh"
 DESTINATAIRE_EMAIL = "mamadymansare43@gmail.com"
 
 def obtenir_headers_aleatoires():
@@ -49,20 +49,17 @@ def obtenir_headers_aleatoires():
     }
 
 def faire_requete_cloudscraper():
-    """Utilise cloudscraper pour passer les protections anti-bot"""
     try:
-        # Crée le scraper sans le paramètre browser (plus sûr)
         scraper = cloudscraper.create_scraper(delay=random.uniform(0.6, 1.8))
         headers = obtenir_headers_aleatoires()
         params = {
             'period': 'currentSchoolYear',
             'location': '',
             'maxPrice': '',
-            '_': str(int(time.time() * 1000)),  # Timestamp
+            '_': str(int(time.time() * 1000)),
             'rnd': random.randint(1000, 9999)
         }
         url = BASE_URL + '?' + urlencode(params)
-        # Visite d'abord la page d'accueil pour obtenir cookies/session
         scraper.get(BASE_URL, headers=headers, timeout=15)
         time.sleep(random.uniform(1, 2.5))
         response = scraper.get(url, headers=headers, timeout=25)
@@ -123,6 +120,7 @@ def extraire_annonces(html):
     return annonces
 
 def envoyer_notification(annonce, verification=False):
+    print("Début envoi email")
     if verification:
         sujet = "🟢 Vérification - Script logement Lille lancé"
         message = (
@@ -170,14 +168,12 @@ def surveiller():
             print(f"🎯 NOUVELLE ANNONCE: {annonce['titre']}")
             envoyer_notification(annonce)
             annonces_connues.append(annonce)
-    # Nettoyer les anciennes annonces (> 24h)
     maintenant = time.time()
     annonces_connues = [a for a in annonces_connues if maintenant - a.get('timestamp', 0) < 86400]
     sauvegarder_annonces(annonces_connues[-150:])
 
 if __name__ == "__main__":
     print("🛡️  Lancement du script avec cloudscraper (anti-403)")
-    # ENVOI D'UN EMAIL DE VÉRIFICATION AU DÉMARRAGE
     envoyer_notification(
         {
             "lieu": VILLE_CIBLE,
@@ -201,4 +197,3 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"💥 Erreur: {e} - Pause de 2 minutes")
             time.sleep(120)
-
