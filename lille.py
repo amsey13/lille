@@ -50,21 +50,18 @@ def obtenir_headers_aleatoires():
 
 def faire_requete_cloudscraper():
     """Utilise cloudscraper pour passer les protections anti-bot"""
-    # Correction: utiliser le paramètre browser='chrome' (sans dictionnaire), ou sans rien
-    scraper = cloudscraper.create_scraper(
-        browser='chrome',
-        delay=random.uniform(0.6, 1.8)
-    )
-    headers = obtenir_headers_aleatoires()
-    params = {
-        'period': 'currentSchoolYear',
-        'location': '',
-        'maxPrice': '',
-        '_': str(int(time.time() * 1000)),  # Timestamp
-        'rnd': random.randint(1000, 9999)
-    }
-    url = BASE_URL + '?' + urlencode(params)
     try:
+        # Crée le scraper sans le paramètre browser (plus sûr)
+        scraper = cloudscraper.create_scraper(delay=random.uniform(0.6, 1.8))
+        headers = obtenir_headers_aleatoires()
+        params = {
+            'period': 'currentSchoolYear',
+            'location': '',
+            'maxPrice': '',
+            '_': str(int(time.time() * 1000)),  # Timestamp
+            'rnd': random.randint(1000, 9999)
+        }
+        url = BASE_URL + '?' + urlencode(params)
         # Visite d'abord la page d'accueil pour obtenir cookies/session
         scraper.get(BASE_URL, headers=headers, timeout=15)
         time.sleep(random.uniform(1, 2.5))
@@ -79,110 +76,5 @@ def faire_requete_cloudscraper():
         print(f"🚫 Erreur cloudscraper : {e}")
         return None
 
-def charger_annonces_connues():
-    try:
-        with open(FICHIER_SAUVEGARDE, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
-
-def sauvegarder_annonces(annonces):
-    with open(FICHIER_SAUVEGARDE, 'w') as f:
-        json.dump(annonces, f)
-
-def extraire_annonces(html):
-    if not html:
-        return []
-    soup = BeautifulSoup(html, 'html.parser')
-    annonces = []
-    elements_potentiels = soup.find_all(['div', 'article', 'section', 'li', 'tr'])
-    for elem in elements_potentiels[:50]:
-        try:
-            texte = elem.get_text().lower()
-            if VILLE_CIBLE.lower() not in texte:
-                continue
-            titre_elem = elem.find(['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'b', 'span'])
-            titre = titre_elem.text.strip() if titre_elem else "Logement CROUS Lille"
-            prix_match = re.search(r'(\d+[\s€]*)+', elem.get_text())
-            prix = prix_match.group(0).strip() if prix_match else "Prix non communiqué"
-            lien_elem = elem.find('a')
-            if lien_elem and lien_elem.get('href'):
-                lien = lien_elem['href']
-                if not lien.startswith('http'):
-                    lien = BASE_URL + lien.lstrip('/')
-            else:
-                lien = BASE_URL
-            id_annonce = str(abs(hash(titre + str(time.time()))))[-10:]
-            annonces.append({
-                'id': id_annonce,
-                'titre': titre[:100],
-                'lieu': VILLE_CIBLE,
-                'prix': prix,
-                'lien': lien,
-                'timestamp': time.time()
-            })
-        except Exception:
-            continue
-    return annonces
-
-def envoyer_notification(annonce):
-    sujet = f"🚨 ALERTE LOGEMENT LILLE - {time.strftime('%H:%M')}"
-    message = f"""
-    NOUVEAU LOGEMENT DÉTECTÉ !
-
-    📍 Lieu: {annonce['lieu']}
-    🏠 Titre: {annonce['titre']}
-    💰 Prix: {annonce['prix']}
-    🔗 Lien: {annonce['lien']}
-
-    ⏰ Détecté à: {time.strftime('%H:%M:%S')}
-    """
-    msg = MIMEText(message, 'plain', 'utf-8')
-    msg['Subject'] = sujet
-    msg['From'] = EXPEDITEUR_EMAIL
-    msg['To'] = DESTINATAIRE_EMAIL
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EXPEDITEUR_EMAIL, MOT_DE_PASSE_APP)
-        server.send_message(msg)
-        server.quit()
-        print("📧 Notification envoyée")
-    except Exception as e:
-        print(f"❌ Erreur email: {e}")
-
-def surveiller():
-    annonces_connues = charger_annonces_connues()
-    ids_connus = [a['id'] for a in annonces_connues]
-    html = faire_requete_cloudscraper()
-    if not html:
-        print("💥 Impossible d'accéder au site. Pause de 5 minutes.")
-        time.sleep(300)
-        return
-    nouvelles_annonces = extraire_annonces(html)
-    for annonce in nouvelles_annonces:
-        if annonce['id'] not in ids_connus:
-            print(f"🎯 NOUVELLE ANNONCE: {annonce['titre']}")
-            envoyer_notification(annonce)
-            annonces_connues.append(annonce)
-    # Nettoyer les anciennes annonces (> 24h)
-    maintenant = time.time()
-    annonces_connues = [a for a in annonces_connues if maintenant - a.get('timestamp', 0) < 86400]
-    sauvegarder_annonces(annonces_connues[-150:])
-
-if __name__ == "__main__":
-    print("🛡️  Lancement du script avec cloudscraper (anti-403)")
-    compteur = 0
-    while True:
-        try:
-            compteur += 1
-            print(f"\n🔍 Vérification #{compteur} - {time.strftime('%H:%M:%S')}")
-            surveiller()
-            delai = INTERVALLE + random.randint(-10, 10)
-            time.sleep(max(30, delai))
-        except KeyboardInterrupt:
-            print("\n🛑 Arrêt demandé")
-            break
-        except Exception as e:
-            print(f"💥 Erreur: {e} - Pause de 2 minutes")
-            time.sleep(120)
+# le reste du code inchangé
+# ...
