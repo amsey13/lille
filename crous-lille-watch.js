@@ -1,3 +1,5 @@
+// surveille-crous-lille-sms.js
+require('dotenv').config();
 const axios = require('axios');
 const cheerio = require('cheerio');
 const nodemailer = require('nodemailer');
@@ -10,10 +12,43 @@ const BASE_URL = "https://trouverunlogement.lescrous.fr/";
 const FICHIER_SAUVEGARDE = path.join(__dirname, "annonces_deja_vues.json");
 const INTERVALLE = 45; // secondes
 
-// Email
-const EXPEDITEUR_EMAIL = "mamady22mansare@gmail.com";
-const MOT_DE_PASSE_APP = "vuhqliwmnwjyarlh";
-const DESTINATAIRE_EMAIL = "mamadymansare43@gmail.com";
+// Email (préférer définir via .env)
+const EXPEDITEUR_EMAIL = process.env.EXPEDITEUR_EMAIL || "mamady22mansare@gmail.com";
+const MOT_DE_PASSE_APP = process.env.MOT_DE_PASSE_APP || "vuhqliwmnwjyarlh";
+const DESTINATAIRE_EMAIL = process.env.DESTINATAIRE_EMAIL || "mamadymansare43@gmail.com";
+
+// Free Mobile SMS config (si tu es abonné Free Mobile) - définir dans .env
+const FREE_SMS_ENABLED = (process.env.FREE_SMS_ENABLED === '1');
+const FREE_MOBILE_USER = process.env.FREE_MOBILE_USER || '';
+const FREE_MOBILE_PASS = process.env.FREE_MOBILE_PASS || '';
+const SMS_STATS_FILE = path.join(__dirname, 'sms_stats.json');
+
+// limites SMS (Free Mobile domotique: 1 SMS/min et ~200/jour)
+const SMS_MIN_INTERVAL_SECONDS = 65;
+const SMS_MAX_PER_DAY = 200;
+
+// --- helpers pour sauvegarder/charger stats SMS
+function loadSmsStats() {
+    try {
+        if (fs.existsSync(SMS_STATS_FILE)) {
+            return JSON.parse(fs.readFileSync(SMS_STATS_FILE, 'utf8'));
+        }
+    } catch (e) { /* ignore */ }
+    return { lastSent: 0, countToday: 0, date: (new Date()).toISOString().slice(0,10) };
+}
+
+function saveSmsStats(stats) {
+    try { fs.writeFileSync(SMS_STATS_FILE, JSON.stringify(stats, null, 2)); } catch(e){ /* ignore */ }
+}
+
+function resetSmsStatsIfNeeded(stats) {
+    const today = (new Date()).toISOString().slice(0,10);
+    if (stats.date !== today) {
+        stats.countToday = 0;
+        stats.date = today;
+    }
+    return stats;
+}
 
 // User agents & headers
 function getRandomHeaders() {
@@ -140,7 +175,58 @@ async function sendMail(annonce, verification=false) {
     }
 }
 
-// Boucle principale
+// --- Envoi SMS via Free Mobile (gratuit pour abonnés Free Mobile)
+// Docs / comportement : envoi vers le numéro lié au compte Free et activation nécessaire dans l'espace abonné.
+async function sendSmsFreeMobile(message) {
+    if (!FREE_MOBILE_USER || !FREE_MOBILE_PASS) {
+        console.log("ℹ️ SMS Free Mobile non configuré (user/pass manquants).");
+        return;
+    }
+
+    // limiter la fréquence et le nombre journalier
+    let stats = loadSmsStats();
+    stats = resetSmsStatsIfNeeded(stats);
+    const now = Math.floor(Date.now() / 1000);
+    if (now - (stats.lastSent || 0) < SMS_MIN_INTERVAL_SECONDS) {
+        console.log("⚠️ Ignoré: envoi SMS trop fréquent (limite 1/min).");
+        return;
+    }
+    if (stats.countToday >= SMS_MAX_PER_DAY) {
+        console.log("⚠️ Ignoré: quota SMS journalier atteint.");
+        return;
+    }
+
+    // tronquer le message à ~140 caractères pour garantir la livraison (adaptable)
+    let body = message.toString().slice(0, 140);
+
+    const url = `https://smsapi.free-mobile.fr/sendmsg?user=${encodeURIComponent(FREE_MOBILE_USER)}&pass=${encodeURIComponent(FREE_MOBILE_PASS)}&msg=${encodeURIComponent(body)}`;
+
+    try {
+        const res = await axios.get(url, { timeout: 10000 });
+        if (res.status >= 200 && res.status < 300) {
+            stats.lastSent = now;
+            stats.countToday = (stats.countToday || 0) + 1;
+            saveSmsStats(stats);
+            console.log("📱 SMS envoyé via Free Mobile (OK).");
+        } else {
+            console.log("❌ Erreur SMS Free Mobile, status:", res.status);
+        }
+    } catch (e) {
+        console.log("❌ Erreur HTTP SMS Free Mobile:", e.message);
+    }
+}
+
+// Envoi combiné (email + sms si activé)
+async function sendAlert(annonce) {
+    await sendMail(annonce);
+    // envoyer un SMS résumé si activé (FREE_SMS_ENABLED permet de désactiver les SMS globaux)
+    if (FREE_SMS_ENABLED) {
+        const smsMsg = `NOUVEAU LOGEMENT: ${annonce.titre} - ${annonce.prix} - ${annonce.lien}`;
+        await sendSmsFreeMobile(smsMsg);
+    }
+}
+
+// Boucle principale de surveillance
 async function surveiller() {
     let annoncesConnues = loadAnnonces();
     let idsConnus = annoncesConnues.map(a => a.id);
@@ -155,7 +241,7 @@ async function surveiller() {
     for (const annonce of nouvelles) {
         if (!idsConnus.includes(annonce.id)) {
             console.log("🎯 NOUVELLE ANNONCE:", annonce.titre);
-            await sendMail(annonce);
+            await sendAlert(annonce); // envoi email + sms si possible
             annoncesConnues.push(annonce);
             ajout = true;
         }
@@ -166,9 +252,31 @@ async function surveiller() {
     saveAnnonces(annoncesConnues.slice(-150));
 }
 
+// Fonction main (démarrage + test SMS de démarrage si identifiants fournis)
 async function main() {
     console.log("🛡️ Lancement du script CROUS Lille sur Node.js");
     await sendMail({lieu: VILLE_CIBLE, titre: "Test script démarré", prix: "", lien: BASE_URL}, true);
+
+    // Test SMS de démarrage : envoie si les identifiants Free Mobile sont renseignés
+    if (FREE_MOBILE_USER && FREE_MOBILE_PASS) {
+        try {
+            console.log("📲 Tentative d'envoi du SMS de démarrage...");
+            await sendSmsFreeMobile(`Test: script de surveillance ${VILLE_CIBLE} démarré.`);
+        } catch (e) {
+            console.log("❌ Erreur lors de l'envoi du SMS de démarrage:", e.message);
+        }
+    } else if (FREE_SMS_ENABLED) {
+        // fallback si tu as explicitement activé FREE_SMS_ENABLED mais n'a pas renseigné user/pass (rare)
+        try {
+            console.log("📲 FREE_SMS_ENABLED true mais identifiants absents — tentative d'envoi...");
+            await sendSmsFreeMobile(`Test: script de surveillance ${VILLE_CIBLE} démarré.`);
+        } catch (e) {
+            console.log("❌ Erreur SMS (fallback):", e.message);
+        }
+    } else {
+        console.log("ℹ️ SMS de démarrage non envoyé — identifiants Free Mobile absents.");
+    }
+
     let compteur = 0;
     while (true) {
         try {
